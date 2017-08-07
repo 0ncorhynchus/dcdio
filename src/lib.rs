@@ -1,7 +1,12 @@
 extern crate byteorder;
+mod unformatted;
+mod error;
 
-use std::io::Read;
+use std::io::{Read, Cursor, SeekFrom};
+use std::io::prelude::*;
 use byteorder::*;
+use unformatted::ReadUnformattedExt;
+use error::*;
 
 pub struct Frame {
     pub step: i32,
@@ -19,83 +24,111 @@ impl Frame {
     }
 }
 
-pub struct DCDReader<R: Read> {
-    inner: R,
-    is_initialized: bool,
+struct DcdHeader {
     num_frames: usize,
     initial_step: i32,
     step_interval: i32,
-    num_fixed_atoms: usize,
-    num_atoms: usize,
+    // num_fixed_atoms: usize,
     delta: f32,
+    version: i32,
+    num_atoms: usize,
+    title: String
 }
 
-impl<R: Read> DCDReader<R> {
-    pub fn new(reader: R) -> Self {
-        DCDReader {
-            inner: reader,
-            is_initialized: false,
-            num_frames: 0,
-            initial_step: 0,
-            step_interval: 0,
-            num_fixed_atoms: 0,
-            num_atoms: 0,
-            delta: 0.0
+impl DcdHeader {
+    pub fn load<R: Read + ?Sized> (reader: &mut R) -> Result<Self> {
+        let mut buf = Cursor::new(reader.read_unformatted()?);
+        buf.seek(SeekFrom::Current(4))?;
+
+        let num_frames    = buf.read_i32::<LittleEndian>()? as usize;
+        let initial_step  = buf.read_i32::<LittleEndian>()?;
+        let step_interval = buf.read_i32::<LittleEndian>()?;
+
+        buf.seek(SeekFrom::Current(20))?;
+
+        let num_fixed_atoms = buf.read_i32::<LittleEndian>()? as usize;
+        if num_fixed_atoms != 0 {
+            return Err(Error::NotSupported(
+                    "Fixed atoms are not supported.".to_string()));
         }
+
+        let delta = buf.read_f32::<LittleEndian>()?;
+
+        buf.seek(SeekFrom::Current(36))?;
+
+        let version = buf.read_i32::<LittleEndian>()?;
+
+        buf = Cursor::new(reader.read_unformatted()?);
+        let num_atoms = buf.read_i32::<LittleEndian>()? as usize;
+
+        buf = Cursor::new(reader.read_unformatted()?);
+        let num_titles = buf.read_i32::<LittleEndian>()? as usize;
+        let mut lines = vec![0u8; num_titles * 80];
+        buf.read(&mut lines)?;
+        let title = String::from_utf8(lines)?;
+
+        Ok(DcdHeader {
+            num_frames:     num_frames,
+            initial_step:   initial_step,
+            step_interval:  step_interval,
+            // num_fixed_atoms: num_fixed_atoms,
+            delta:           delta,
+            version:         version,
+            num_atoms:       num_atoms,
+            title:           title,
+        })
+    }
+}
+
+pub struct DcdReader<R> {
+    inner: R,
+    next_step: i32,
+    header: DcdHeader,
+    // fixed_atoms: Vec<(f32, f32, f32)>,
+}
+
+impl<R: Read> DcdReader<R> {
+    pub fn new(mut reader: R) -> Result<Self> {
+        let header = DcdHeader::load(&mut reader)?;
+        // let fixed_atoms = vec![(0.0, 0.0, 0.0); header.num_fixed_atoms];
+        Ok(DcdReader {
+            inner: reader,
+            next_step: header.initial_step,
+            header: header,
+            // fixed_atoms: fixed_atoms,
+        })
     }
 
     pub fn num_frames(&self) -> usize {
-        self.num_frames
+        self.header.num_frames
     }
 
-    fn read_i32(&mut self) -> std::io::Result<i32> {
-        self.inner.read_i32::<LittleEndian>()
+    pub fn version(&self) -> i32 {
+        self.header.version
     }
 
-    fn read_f32(&mut self) -> std::io::Result<f32> {
-        self.inner.read_f32::<LittleEndian>()
+    pub fn title(&self) -> String {
+        self.header.title.clone()
     }
 
-    fn skip_bytes(&mut self, bytes: usize) -> std::io::Result<usize> {
-        let mut buf = vec![0u8; bytes];
-        self.inner.read(&mut buf)
-    }
+    pub fn read_frame(&mut self) -> Result<Frame> {
+        let num_atoms = self.header.num_atoms;
 
-    pub fn read_header(&mut self) -> std::io::Result<()> {
-        if self.is_initialized {
-            return Ok(());
-        }
+        let mut bufx = Cursor::new(self.inner.read_unformatted()?);
+        let mut bufy = Cursor::new(self.inner.read_unformatted()?);
+        let mut bufz = Cursor::new(self.inner.read_unformatted()?);
 
-        {
-            let block_size = self.read_i32()?;
-            self.skip_bytes(4)?;
+        let positions = vec![
+            (bufx.read_f32::<LittleEndian>()?,
+             bufy.read_f32::<LittleEndian>()?,
+             bufz.read_f32::<LittleEndian>()?)
+            ; num_atoms
+        ];
 
-            self.num_frames = self.read_i32()? as usize;
-            self.initial_step = self.read_i32()?;
-            self.step_interval = self.read_i32()?;
+        let step = self.next_step;
+        self.next_step += self.header.step_interval;
 
-            self.skip_bytes(20)?;
-
-            self.num_fixed_atoms = self.read_i32()? as usize;
-            self.delta = self.read_f32()?;
-            let _ = self.read_i32()?; // crystal
-
-            self.skip_bytes(32)?;
-            let _ = self.read_i32()?; // version
-
-            // TODO
-            assert_eq!(block_size, self.read_i32()?);
-        }
-
-        {
-            let block_size = self.read_i32()?;
-            self.num_atoms = self.read_i32()? as usize;
-            // TODO
-            assert_eq!(block_size, self.read_i32()?);
-        }
-
-        self.is_initialized = true;
-        Ok(())
+        Ok(Frame::new(step, self.header.delta * step as f32, positions))
     }
 }
 
