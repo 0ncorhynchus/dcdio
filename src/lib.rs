@@ -8,14 +8,17 @@ use byteorder::*;
 use unformatted::ReadUnformattedExt;
 use error::*;
 
+type Endian = NativeEndian;
+type Position = (f32, f32, f32);
+
 pub struct Frame {
     pub step: i32,
     pub time: f32,
-    pub positions: Vec<(f32, f32, f32)>,
+    pub positions: Vec<Position>,
 }
 
 impl Frame {
-    pub fn new(step: i32, time: f32, positions: Vec<(f32, f32, f32)>) -> Self {
+    pub fn new(step: i32, time: f32, positions: Vec<Position>) -> Self {
         Frame {
             step: step,
             time: time,
@@ -40,29 +43,29 @@ impl DcdHeader {
         let mut buf = Cursor::new(reader.read_unformatted()?);
         buf.seek(SeekFrom::Current(4))?;
 
-        let num_frames    = buf.read_i32::<LittleEndian>()? as usize;
-        let initial_step  = buf.read_i32::<LittleEndian>()?;
-        let step_interval = buf.read_i32::<LittleEndian>()?;
+        let num_frames    = buf.read_i32::<Endian>()? as usize;
+        let initial_step  = buf.read_i32::<Endian>()?;
+        let step_interval = buf.read_i32::<Endian>()?;
 
         buf.seek(SeekFrom::Current(20))?;
 
-        let num_fixed_atoms = buf.read_i32::<LittleEndian>()? as usize;
+        let num_fixed_atoms = buf.read_i32::<Endian>()? as usize;
         if num_fixed_atoms != 0 {
             return Err(Error::NotSupported(
                     "Fixed atoms are not supported.".to_string()));
         }
 
-        let delta = buf.read_f32::<LittleEndian>()?;
+        let delta = buf.read_f32::<Endian>()?;
 
         buf.seek(SeekFrom::Current(36))?;
 
-        let version = buf.read_i32::<LittleEndian>()?;
+        let version = buf.read_i32::<Endian>()?;
 
         buf = Cursor::new(reader.read_unformatted()?);
-        let num_atoms = buf.read_i32::<LittleEndian>()? as usize;
+        let num_atoms = buf.read_i32::<Endian>()? as usize;
 
         buf = Cursor::new(reader.read_unformatted()?);
-        let num_titles = buf.read_i32::<LittleEndian>()? as usize;
+        let num_titles = buf.read_i32::<Endian>()? as usize;
         let mut lines = vec![0u8; num_titles * 80];
         buf.read(&mut lines)?;
         let title = String::from_utf8(lines)?;
@@ -118,12 +121,12 @@ impl<R: Read> DcdReader<R> {
         let mut bufy = Cursor::new(self.inner.read_unformatted()?);
         let mut bufz = Cursor::new(self.inner.read_unformatted()?);
 
-        let positions = vec![
-            (bufx.read_f32::<LittleEndian>()?,
-             bufy.read_f32::<LittleEndian>()?,
-             bufz.read_f32::<LittleEndian>()?)
-            ; num_atoms
-        ];
+        let mut positions = Vec::new();
+        for _ in 0..num_atoms {
+            positions.push((bufx.read_f32::<Endian>()?,
+                            bufy.read_f32::<Endian>()?,
+                            bufz.read_f32::<Endian>()?));
+        }
 
         let step = self.next_step;
         self.next_step += self.header.step_interval;
