@@ -9,7 +9,7 @@ use byteorder::*;
 use unformatted::ReadUnformattedExt;
 use error::*;
 
-pub use read::DcdReader;
+pub use read::{DcdReader, DcdFrames};
 
 type Endian = NativeEndian;
 type Position = (f32, f32, f32);
@@ -30,15 +30,15 @@ impl Frame {
     }
 }
 
-struct DcdHeader {
-    num_frames: usize,
-    initial_step: i32,
-    step_interval: i32,
-    // num_fixed_atoms: usize,
-    delta: f32,
-    version: i32,
-    num_atoms: usize,
-    title: String
+pub struct DcdHeader {
+    pub num_frames: usize,
+    pub initial_step: i32,
+    pub step_interval: i32,
+    pub num_fixed_atoms: usize,
+    pub delta: f32,
+    pub version: i32,
+    pub num_atoms: usize,
+    pub title: String
 }
 
 impl DcdHeader {
@@ -77,7 +77,7 @@ impl DcdHeader {
             num_frames:     num_frames,
             initial_step:   initial_step,
             step_interval:  step_interval,
-            // num_fixed_atoms: num_fixed_atoms,
+            num_fixed_atoms: num_fixed_atoms,
             delta:           delta,
             version:         version,
             num_atoms:       num_atoms,

@@ -6,9 +6,9 @@ use ::{Endian, Frame, DcdHeader};
 
 pub struct DcdReader<R> {
     inner: R,
-    next_step: i32,
-    header: DcdHeader,
+    index: usize,
     // fixed_atoms: Vec<(f32, f32, f32)>,
+    pub header: DcdHeader,
 }
 
 impl<R: Read> DcdReader<R> {
@@ -17,22 +17,10 @@ impl<R: Read> DcdReader<R> {
         // let fixed_atoms = vec![(0.0, 0.0, 0.0); header.num_fixed_atoms];
         Ok(DcdReader {
             inner: reader,
-            next_step: header.initial_step,
-            header: header,
+            index: 0,
             // fixed_atoms: fixed_atoms,
+            header: header,
         })
-    }
-
-    pub fn num_frames(&self) -> usize {
-        self.header.num_frames
-    }
-
-    pub fn version(&self) -> i32 {
-        self.header.version
-    }
-
-    pub fn title(&self) -> String {
-        self.header.title.clone()
     }
 
     pub fn read_frame(&mut self) -> Result<Frame> {
@@ -49,10 +37,32 @@ impl<R: Read> DcdReader<R> {
                             bufz.read_f32::<Endian>()?));
         }
 
-        let step = self.next_step;
-        self.next_step += self.header.step_interval;
+        let step = self.header.step_interval * self.index as i32
+                   + self.header.initial_step;
+        self.index += 1;
 
         Ok(Frame::new(step, self.header.delta * step as f32, positions))
     }
+
+    pub fn frames(self) -> DcdFrames<R> {
+        DcdFrames {
+            reader: self
+        }
+    }
 }
 
+pub struct DcdFrames<R> {
+    reader: DcdReader<R>,
+}
+
+impl<R: Read> Iterator for DcdFrames<R> {
+    type Item = Result<Frame>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.index < self.reader.header.num_frames {
+            Some(self.reader.read_frame())
+        } else {
+            None
+        }
+    }
+}
