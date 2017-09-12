@@ -2,8 +2,10 @@ extern crate byteorder;
 mod unformatted;
 mod error;
 mod read;
+mod write;
 
-pub use read::{DcdReader, DcdFrames};
+pub use ::read::{DcdReader, DcdFrames};
+pub use ::write::DcdWriter;
 
 type Endian = byteorder::NativeEndian;
 type Position = (f32, f32, f32);

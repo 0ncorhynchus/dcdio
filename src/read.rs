@@ -1,24 +1,21 @@
 use std::io::{Read, Cursor, Seek, SeekFrom};
-use unformatted::ReadUnformattedExt;
 use byteorder::ReadBytesExt;
 use ::error::*;
+use ::unformatted::ReadUnformattedExt;
 use ::{Endian, Frame, DcdHeader};
 
 pub struct DcdReader<R> {
     inner: R,
     index: usize,
-    // fixed_atoms: Vec<(f32, f32, f32)>,
     pub header: DcdHeader,
 }
 
 impl<R: Read> DcdReader<R> {
     pub fn new(mut reader: R) -> Result<Self> {
         let header = read_header(&mut reader)?;
-        // let fixed_atoms = vec![(0.0, 0.0, 0.0); header.num_fixed_atoms];
         Ok(DcdReader {
             inner: reader,
             index: 0,
-            // fixed_atoms: fixed_atoms,
             header: header,
         })
     }
@@ -72,14 +69,18 @@ fn read_header<R: Read + ?Sized>(reader: &mut R) -> Result<DcdHeader> {
 
     let version = buf.read_i32::<Endian>()?;
 
-    buf = Cursor::new(reader.read_unformatted::<Endian>()?);
-    let num_titles = buf.read_i32::<Endian>()? as usize;
-    let mut lines = vec![0u8; num_titles * 80];
-    buf.read(&mut lines)?;
-    let title = String::from_utf8(lines)?;
+    let title = {
+        let mut buf = Cursor::new(reader.read_unformatted::<Endian>()?);
+        let num_titles = buf.read_i32::<Endian>()? as usize;
+        let mut lines = vec![0u8; num_titles * 80];
+        buf.read(&mut lines)?;
+        String::from_utf8(lines)?
+    };
 
-    buf = Cursor::new(reader.read_unformatted::<Endian>()?);
-    let num_atoms = buf.read_i32::<Endian>()? as usize;
+    let num_atoms = {
+        let mut buf = Cursor::new(reader.read_unformatted::<Endian>()?);
+        buf.read_i32::<Endian>()? as usize
+    };
 
     Ok(DcdHeader {
         num_frames:     num_frames,
