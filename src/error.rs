@@ -2,6 +2,7 @@ use std::io;
 use std::result;
 use std::string;
 
+#[derive(Debug)]
 pub enum Error {
     IO(io::Error),
     Utf8(string::FromUtf8Error),
