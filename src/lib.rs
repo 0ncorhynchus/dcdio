@@ -62,13 +62,13 @@ impl DcdHeader {
         let version = buf.read_i32::<Endian>()?;
 
         buf = Cursor::new(reader.read_unformatted()?);
-        let num_atoms = buf.read_i32::<Endian>()? as usize;
-
-        buf = Cursor::new(reader.read_unformatted()?);
         let num_titles = buf.read_i32::<Endian>()? as usize;
         let mut lines = vec![0u8; num_titles * 80];
         buf.read(&mut lines)?;
         let title = String::from_utf8(lines)?;
+
+        buf = Cursor::new(reader.read_unformatted()?);
+        let num_atoms = buf.read_i32::<Endian>()? as usize;
 
         Ok(DcdHeader {
             num_frames:     num_frames,
