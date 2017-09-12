@@ -40,7 +40,7 @@ struct DcdHeader {
 
 impl DcdHeader {
     pub fn load<R: Read + ?Sized> (reader: &mut R) -> Result<Self> {
-        let mut buf = Cursor::new(reader.read_unformatted()?);
+        let mut buf = Cursor::new(reader.read_unformatted::<Endian>()?);
         buf.seek(SeekFrom::Current(4))?;
 
         let num_frames    = buf.read_i32::<Endian>()? as usize;
@@ -61,13 +61,13 @@ impl DcdHeader {
 
         let version = buf.read_i32::<Endian>()?;
 
-        buf = Cursor::new(reader.read_unformatted()?);
+        buf = Cursor::new(reader.read_unformatted::<Endian>()?);
         let num_titles = buf.read_i32::<Endian>()? as usize;
         let mut lines = vec![0u8; num_titles * 80];
         buf.read(&mut lines)?;
         let title = String::from_utf8(lines)?;
 
-        buf = Cursor::new(reader.read_unformatted()?);
+        buf = Cursor::new(reader.read_unformatted::<Endian>()?);
         let num_atoms = buf.read_i32::<Endian>()? as usize;
 
         Ok(DcdHeader {
@@ -117,9 +117,9 @@ impl<R: Read> DcdReader<R> {
     pub fn read_frame(&mut self) -> Result<Frame> {
         let num_atoms = self.header.num_atoms;
 
-        let mut bufx = Cursor::new(self.inner.read_unformatted()?);
-        let mut bufy = Cursor::new(self.inner.read_unformatted()?);
-        let mut bufz = Cursor::new(self.inner.read_unformatted()?);
+        let mut bufx = Cursor::new(self.inner.read_unformatted::<Endian>()?);
+        let mut bufy = Cursor::new(self.inner.read_unformatted::<Endian>()?);
+        let mut bufz = Cursor::new(self.inner.read_unformatted::<Endian>()?);
 
         let mut positions = Vec::new();
         for _ in 0..num_atoms {
