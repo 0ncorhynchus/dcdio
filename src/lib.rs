@@ -10,6 +10,7 @@ pub use ::write::DcdWriter;
 type Endian = byteorder::NativeEndian;
 type Position = (f32, f32, f32);
 
+#[derive(Clone)]
 pub struct Frame {
     pub step: i32,
     pub time: f32,
@@ -26,6 +27,7 @@ impl Frame {
     }
 }
 
+#[derive(Clone)]
 pub struct DcdHeader {
     pub num_frames: usize,
     pub initial_step: i32,
